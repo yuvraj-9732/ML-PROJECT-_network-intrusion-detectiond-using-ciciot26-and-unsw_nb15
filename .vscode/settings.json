@@ -1,0 +1,6 @@
+{
+    "terminal.integrated.shellArgs.windows": ["-NoProfile"],
+    "python.defaultInterpreterPath": "python",
+    "python.terminal.executeInFileDir": true,
+    "python.linting.enabled": false
+}

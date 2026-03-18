@@ -4,35 +4,40 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # ── Load encoded dataset ──────────────────────────────────────────────────────
+# First, just want to look at the data and understand what we're dealing with
 print("Loading merged_encoded.parquet ...")
+print("    (this should be the preprocessed data from data loading step)")
 df = pd.read_parquet("merged_encoded.parquet")
 print(f"Shape: {df.shape[0]:,} rows  x  {df.shape[1]} columns")
 
+# Make pandas output wider so we can see everything
 pd.set_option("display.max_columns", None)
 pd.set_option("display.width", 200)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1.  BASIC INFO
+# 1.  BASIC INFO - Just see what's in the data
 # ─────────────────────────────────────────────────────────────────────────────
 print("\n── Columns & dtypes ──────────────────────────────────────────")
 print(df.dtypes.to_string())
 
-print("\n── Null counts ───────────────────────────────────────────────")
+print("\n── Null counts (check for missing values) ────────────────────")
 null_counts = df.isnull().sum()
 print(null_counts[null_counts > 0].to_string() if null_counts.any() else "  No nulls — clean dataset ✔")
 
-print("\n── Descriptive statistics ────────────────────────────────────")
+print("\n── Descriptive statistics (min/max/mean/etc) ──────────────────")
 print(df.describe().to_string())
 
-print("\n── First 5 rows ──────────────────────────────────────────────")
+print("\n── First 5 rows (what does the actual data look like?) ──────")
 print(df.head(5).to_string())
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2.  CORRELATION HEATMAP
+# 2.  CORRELATION HEATMAP - See which features are redundant
 # ─────────────────────────────────────────────────────────────────────────────
 print("\nComputing correlation matrix ...")
+print("    (this might take a moment with all the features...)")
 corr = df.corr()
 
+print(f"[*] Creating huge heatmap ({df.shape[1]}x{df.shape[1]})")
 fig, ax = plt.subplots(figsize=(28, 24))
 mask = np.triu(np.ones_like(corr, dtype=bool))
 sns.heatmap(
@@ -41,7 +46,7 @@ sns.heatmap(
     cmap="coolwarm",
     center=0,
     vmin=-1, vmax=1,
-    annot=False,
+    annot=False,   # set to True if you want values on heatmap (but it's slow)
     linewidths=0.3,
     cbar_kws={"shrink": 0.6, "label": "Pearson r"},
     ax=ax,

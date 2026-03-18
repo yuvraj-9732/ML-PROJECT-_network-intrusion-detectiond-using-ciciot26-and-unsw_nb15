@@ -1,0 +1,24 @@
+  ==========================================================================================
+  ALL MODELS — COMPARISON SUMMARY
+  Dataset: CICIoT2023 + UNSW-NB15 (merged_clean.parquet)
+  Features: 35 predictors → label (36 attack classes, integer 0-35)
+  GPU: XGBoost (CUDA) + LightGBM (OpenCL) | RF/LR/NB: CPU only
+==========================================================================================
+
+Model                                                Test Acc  F1-Weighted     F1-Macro      CV-F1        Gap   Train(s)
+------------------------------------------------------------------------------------------
+4. XGBoost (Gradient Boosting)                         0.9892       0.9886       0.7436        nan    +0.0044      34.3s
+3. Random Forest (Tree Ensemble)                       0.9885       0.9885       0.8093     0.9766    +0.0088      32.6s
+1. Logistic Regression (Linear Baseline)               0.8279       0.8070       0.5366     0.7599    +0.0001     415.1s
+2. Naive Bayes (Probabilistic Baseline)                0.7050       0.6504       0.4254     0.6938    -0.0003       0.5s
+5. LightGBM (Fast Gradient Boosting) [CPU fallbac      0.4121       0.3861       0.1763     0.1472    -0.0004      26.7s
+
+==========================================================================================
+
+  BEST MODEL : 4. XGBoost (Gradient Boosting)
+  Test Accuracy : 0.9892 (98.92%)
+  F1 Weighted   : 0.9886
+  F1 Macro      : 0.7436
+  Overfitting   : +0.004367
+
+==========================================================================================

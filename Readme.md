@@ -500,17 +500,118 @@ Random Forest (100 trees): 98.87%
 
 ---
 
+## 🗃️ Dataset Schema — What We Predict & What We Use to Predict It
 
-| Property | Value |
-|---|---|
-| **File** | `merged.parquet` |
-| **Rows** | 8,103,346 |
-| **Columns** | 82 |
-| **Target** | `label` (36 attack/traffic classes) |
+| Property | Raw (`merged.parquet`) | Clean (`merged_clean.parquet`) |
+|---|---|---|
+| **Rows** | 8,103,346 | 8,103,346 |
+| **Columns** | 82 | **36** (35 features + 1 target) |
+| **Source** | CICIoT2023 + UNSW-NB15 | Post feature-selection |
 
 The dataset merges two benchmark sources:
 - **CICIoT2023** — modern IoT traffic with DDoS, Mirai, and IoT-specific attacks
 - **UNSW-NB15** — traditional network attacks (Exploits, Fuzzers, DoS, Reconnaissance, etc.)
+
+---
+
+### 🎯 Target Variable — What We Predict (`y`)
+
+> [!IMPORTANT]
+> **Column:** `label` | **dtype:** `int64` | **Values:** 0 – 35 (36 classes)
+
+| Value | Meaning |
+|---|---|
+| `0` | Normal / benign traffic |
+| `1 – 35` | 35 distinct attack categories (DDoS variants, DoS, Recon, Exploits, Fuzzing, Backdoors, etc.) |
+
+The label is **already integer-encoded** in `merged_clean.parquet`. The `LabelEncoder` in `data_setup.py` is a safety guard only.
+
+> [!WARNING]
+> `attack_cat` (a coarser attack category string, also in the raw file) was **dropped** during feature selection to prevent **target leakage** — it is a direct summary of `label` and would give the model the answer.
+
+---
+
+### 📐 Predictor Features — What We Train On (`X`)
+
+All **35 columns** below are used as inputs. `label` is the only column excluded.
+
+#### Group 1 — Protocol Flags *(binary 0/1)*
+| # | Feature | dtype | Meaning |
+|---|---|---|---|
+| 1 | `ARP` | float64 | ARP traffic indicator |
+| 2 | `DNS` | float64 | DNS traffic / DNS flood indicator |
+| 3 | `HTTP` | float64 | Plain-text web traffic |
+| 4 | `HTTPS` | float64 | Encrypted web traffic |
+| 5 | `ICMP` | float64 | Ping / ICMP flood indicator |
+| 6 | `LLC` | float64 | Data-link layer protocol flag |
+| 7 | `SSH` | float64 | Encrypted shell — brute-force target |
+| 8 | `TCP` | float64 | Reliable transport protocol flag |
+| 9 | `UDP` | float64 | Unreliable (fast) transport — UDP flood indicator |
+| 10 | `Protocol Type` | float64 | Network-layer protocol code |
+
+#### Group 2 — Packet Size Statistics
+| # | Feature | dtype | Meaning |
+|---|---|---|---|
+| 11 | `Header_Length` | float64 | Packet header size in bytes |
+| 12 | `Max` | float64 | Largest packet in the flow |
+| 13 | `Min` | float64 | Smallest packet in the flow |
+| 14 | `Tot sum` | float64 | Total byte volume of the flow |
+| 15 | `Variance` | float64 | Packet-size spread (high = erratic traffic) |
+| 16 | `Covariance` | float64 | Flow distribution shape metric |
+
+#### Group 3 — Timing & Rate
+| # | Feature | dtype | Meaning |
+|---|---|---|---|
+| 17 | `Duration` | float64 | Flow duration (seconds) |
+| 18 | `flow_duration` | float64 | Flow-level timing (UNSW field) |
+| 19 | `IAT` | float64 | Inter-Arrival Time between packets |
+| 20 | `rate` | float64 | Overall packets-per-second |
+| 21 | `Srate` | float64 | Source packets-per-second |
+| 22 | `Drate` | float64 | Destination packets-per-second |
+
+#### Group 4 — TCP Flags & Counts
+| # | Feature | dtype | Meaning |
+|---|---|---|---|
+| 23 | `ack_flag_number` | float64 | ACK flag count |
+| 24 | `fin_count` | float64 | FIN packet count |
+| 25 | `psh_flag_number` | float64 | PSH flag count |
+| 26 | `rst_count` | float64 | RST packet count |
+| 27 | `rst_flag_number` | float64 | RST flag count |
+| 28 | `syn_count` | float64 | SYN packet count |
+| 29 | `syn_flag_number` | float64 | SYN flag count |
+| 30 | `urg_count` | float64 | URG flag count |
+
+#### Group 5 — Byte Volumes & Payload (UNSW-NB15)
+| # | Feature | dtype | Meaning |
+|---|---|---|---|
+| 31 | `sbytes` | float64 | Source byte volume |
+| 32 | `sload` | float64 | Source bits/second load |
+| 33 | `smean` | float64 | Mean source packet size |
+
+#### Group 6 — Application / Behavioral (UNSW-NB15)
+| # | Feature | dtype | Meaning |
+|---|---|---|---|
+| 34 | `service` | float64 | Application-layer service (label-encoded: http, dns, ftp…) |
+| 35 | `trans_depth` | float64 | HTTP pipeline / FTP transaction depth |
+
+---
+
+### ⚙️ X / y Split in Code (`data_setup.py`)
+
+```python
+X = df.drop('label', axis=1)   # shape: (n_samples, 35) — all predictor features
+y = df['label']                 # shape: (n_samples,)   — integer attack class (0-35)
+```
+
+Two versions of X are available for downstream models:
+
+| Variable | Shape | Used by |
+|---|---|---|
+| `X_train` / `X_test` | `(n, 35)` raw | Random Forest, XGBoost, LightGBM |
+| `X_train_scaled` / `X_test_scaled` | `(n, 35)` z-scored | Logistic Regression, Naive Bayes |
+
+> [!NOTE]
+> Tree-based models (RF, XGBoost, LightGBM) are **scale-invariant** — they split on feature thresholds, not distances. Passing raw features keeps feature importance scores in original, interpretable units.
 
 ---
 
@@ -1099,3 +1200,34 @@ XGBoost learns these patterns: "IF `syn_count` > 50 AND `ack_count` < 10 THEN DD
    - **Target Leakage**: Dropped `attack_cat`.
    - **Final Set**: 35 features + `label`.
    - Saved `merged_clean.parquet`.  
+
+
+   push of 18/3/26
+
+   ==========================================================================================
+  ALL MODELS — COMPARISON SUMMARY
+  Dataset: CICIoT2023 + UNSW-NB15 (merged_clean.parquet)
+  Features: 35 predictors → label (36 attack classes, integer 0-35)
+  GPU: XGBoost (CUDA) + LightGBM (OpenCL) | RF/LR/NB: CPU only
+==========================================================================================
+
+Model                                                Test Acc  F1-Weighted     F1-Macro      CV-F1        Gap   Train(s)
+------------------------------------------------------------------------------------------
+4. XGBoost (Gradient Boosting)                         0.9892       0.9886       0.7436        nan    +0.0044      34.3s
+3. Random Forest (Tree Ensemble)                       0.9885       0.9885       0.8093     0.9766    +0.0088      32.6s
+1. Logistic Regression (Linear Baseline)               0.8279       0.8070       0.5366     0.7599    +0.0001     415.1s
+2. Naive Bayes (Probabilistic Baseline)                0.7050       0.6504       0.4254     0.6938    -0.0003       0.5s
+5. LightGBM (Fast Gradient Boosting) [CPU fallbac      0.4121       0.3861       0.1763     0.1472    -0.0004      26.7s
+
+==========================================================================================
+
+  BEST MODEL : 4. XGBoost (Gradient Boosting)
+  Test Accuracy : 0.9892 (98.92%)
+  F1 Weighted   : 0.9886
+  F1 Macro      : 0.7436
+  Overfitting   : +0.004367
+
+==========================================================================================
+
+
+Unable to optimize XGB and RF

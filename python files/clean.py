@@ -5,6 +5,7 @@ import seaborn as sns
 
 # ── Load encoded dataset ──────────────────────────────────────────────────────
 print("Loading merged_encoded.parquet ...")
+print("    (this file should already be preprocessed from exploration.py)")
 df = pd.read_parquet("merged_encoded.parquet")
 print(f"Original shape: {df.shape[0]:,} rows  x  {df.shape[1]} columns")
 
@@ -48,16 +49,18 @@ for col in upper.columns:
 print(f"\n    Features before : {df.shape[1] - 1}  (excl. target)")
 print(f"    Features to drop: {len(to_drop)}")
 print(f"    Features kept   : {df.shape[1] - 1 - len(to_drop)}")
-print(f"\n    Dropped columns:\n      {sorted(to_drop)}")
+print(f"\n    Dropped columns (these were too correlated):\n      {sorted(to_drop)}")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 2: Also drop near-zero variance features
+#         (tried this after seeing low variance causes training issues)
 # ─────────────────────────────────────────────────────────────────────────────
 VAR_THRESHOLD = 1e-5
 low_var_cols = [
     c for c in df.columns
     if c != TARGET_COL and c not in to_drop and df[c].var() < VAR_THRESHOLD
 ]
+print("    (these features don't change, so models can't learn from them)")
 print(f"\n[2] Near-zero variance columns (var < {VAR_THRESHOLD}): {low_var_cols}")
 to_drop.update(low_var_cols)
 
@@ -104,4 +107,6 @@ print("Saved → heatmap_clean.png")
 print("\n✅ All done!")
 print(f"   Original features : {df.shape[1] - 1}")
 print(f"   Dropped           : {len(to_drop)}")
+print(f"\n   This cleaned dataset is ready for model training!")
+print(f"   Next: run model.py to train 5 different algorithms")
 print(f"   Final features    : {df_clean.shape[1] - 1}  (+ target '{TARGET_COL}')")
