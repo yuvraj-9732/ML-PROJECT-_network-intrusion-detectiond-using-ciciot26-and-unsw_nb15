@@ -1,5 +1,6 @@
 # Parquet data files
 *.parquet
+*.pkl
 
 # Python virtual environment
 .venv/
@@ -17,6 +18,4 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-*.pkl
 
-C:\Users\Admin\Desktop\ML_project\saved_models
