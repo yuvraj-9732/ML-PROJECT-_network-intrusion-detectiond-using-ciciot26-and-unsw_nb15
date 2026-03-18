@@ -18,4 +18,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-
+*.pkl
+*.parquet
+saved_models/
