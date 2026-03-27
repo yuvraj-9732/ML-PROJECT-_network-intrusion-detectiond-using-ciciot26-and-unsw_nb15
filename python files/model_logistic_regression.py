@@ -27,6 +27,7 @@ from data_setup import (
     evaluate_model, imbalance_ratio, X
 )
 from sklearn.linear_model import LogisticRegression
+from tqdm import tqdm
 import pickle
 import os
 
@@ -50,26 +51,40 @@ When: Use for baselines and when linear patterns exist
 Importance: Establishes baseline accuracy, shows feature weights
 """)
 
+pipeline_stages = ["Setup", "Training & Evaluation", "Saving model"]
+pbar_pipeline = tqdm(pipeline_stages, desc="Logistic Regression Pipeline",
+                     bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]")
+
+# Stage 1: Setup
+pbar_pipeline.set_description("[1/3] Setup")
 lr_model = LogisticRegression(
     max_iter=1000,
-    random_state=42
+    random_state=42,
+    class_weight='balanced',
+    C=10.0
 )
+pbar_pipeline.update(1)
+
+# Stage 2: Training & Evaluation (progress bar lives inside evaluate_model)
+pbar_pipeline.set_description("[2/3] Training & Evaluating")
 results_lr = evaluate_model(lr_model, X_train_scaled, X_test_scaled, y_train, y_test,
                             "1. Logistic Regression (Linear Baseline)")
+pbar_pipeline.update(1)
 
-# ============================================================================
-# SAVE MODEL
-# ============================================================================
-print("\n" + "=" * 80)
-print("Saving Logistic Regression Model")
-print("=" * 80)
-
+# Stage 3: Save
+pbar_pipeline.set_description("[3/3] Saving model")
 models_dir = 'saved_models'
 os.makedirs(models_dir, exist_ok=True)
 
 filepath = os.path.join(models_dir, 'logistic_regression.pkl')
 with open(filepath, 'wb') as f:
     pickle.dump(results_lr['Model Object'], f)
+pbar_pipeline.update(1)
+pbar_pipeline.close()
+
+print("\n" + "=" * 80)
+print("Saving Logistic Regression Model")
+print("=" * 80)
 print(f"  [OK] logistic_regression.pkl saved to {models_dir}/")
 
 print("\n" + "=" * 80)

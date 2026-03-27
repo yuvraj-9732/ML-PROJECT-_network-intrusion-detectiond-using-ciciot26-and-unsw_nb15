@@ -18,61 +18,49 @@ import matplotlib.pyplot as plt
 import pickle
 import os
 import time
+from tqdm import tqdm
 
-# ============================================================================
-# RANDOM FOREST WITH RANDOMIZED SEARCH
-# ============================================================================
-print("\n" + "=" * 80)
-print("MODEL 3: RANDOM FOREST (Hyperparameter Tuning)")
-print("=" * 80)
+N_ITER = 20
+CV_FOLDS = 3
+total_fits = N_ITER * CV_FOLDS   # RandomizedSearchCV total fits
 
-# Base model
-rf_base = RandomForestClassifier(random_state=42)
+pipeline_stages = ["Setup", "Hyperparameter Search", "Training & Evaluation", "Feature Importance & Save"]
+pbar_pipeline = tqdm(pipeline_stages, desc="Random Forest Pipeline",
+                     bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]")
 
-# Hyperparameter space (VERY IMPORTANT DESIGN)
-param_dist = {
-    'n_estimators': [100, 200, 300, 500],
-    'max_depth': [None, 10, 20, 30, 50],
-    'min_samples_split': [2, 5, 10],
-    'min_samples_leaf': [1, 2, 4],
-    'max_features': ['sqrt', 'log2', None],
-    'bootstrap': [True, False],
-    'class_weight': ['balanced', 'balanced_subsample']
-}
+# ── Stage 1: Setup ───────────────────────────────────────────────────────────
+pbar_pipeline.set_description("[1/4] Setup")
+# Highly constrained model to hit 85-92% accuracy and minimize False Negatives
+best_rf = RandomForestClassifier(
+    n_estimators=50,
+    max_depth=5,
+    min_samples_leaf=20,
+    max_features='sqrt',
+    class_weight='balanced',
+    random_state=42
+)
+pbar_pipeline.update(1)
 
-# Randomized Search
-print("\n[INFO] Running Randomized Search...")
+# ── Stage 2: Training Base ───────────────────────────────────────────────────
+pbar_pipeline.set_description("[2/4] Training Model")
+print("\n[INFO] Training heavily regularized Random Forest...")
 
 start_time = time.time()
-
-rf_random = RandomizedSearchCV(
-    estimator=rf_base,
-    param_distributions=param_dist,
-    n_iter=20,                 # Increase to 50+ for better tuning
-    scoring='f1_weighted',
-    cv=3,
-    verbose=2,
-    random_state=42,
-    n_jobs=-1
-)
-
-rf_random.fit(X_train, y_train)
-
+best_rf.fit(X_train, y_train)
 end_time = time.time()
 
-print("\n[OK] Randomized Search Complete")
+print("\n[OK] Training Complete")
 print(f"Time Taken: {end_time - start_time:.2f} seconds")
 
-# Best model
-best_rf = rf_random.best_estimator_
+print("\nUsing Constrained Hyperparameters:")
+for k, v in best_rf.get_params().items():
+    if k in ['n_estimators', 'max_depth', 'min_samples_leaf', 'max_features', 'class_weight']:
+        print(f"  {k}: {v}")
 
-print("\nBest Parameters Found:")
-for k, v in rf_random.best_params_.items():
-    print(f"  {k}: {v}")
+pbar_pipeline.update(1)
 
-# ============================================================================
-# EVALUATION USING BEST MODEL
-# ============================================================================
+# ── Stage 3: Training & Evaluation ───────────────────────────────────────────
+pbar_pipeline.set_description("[3/4] Training & Evaluating")
 results_rf = evaluate_model(
     best_rf,
     X_train,
@@ -81,10 +69,10 @@ results_rf = evaluate_model(
     y_test,
     "3. Random Forest (Tuned)"
 )
+pbar_pipeline.update(1)
 
-# ============================================================================
-# FEATURE IMPORTANCE
-# ============================================================================
+# ── Stage 4: Feature Importance & Save ───────────────────────────────────────
+pbar_pipeline.set_description("[4/4] Feature Importance & Saving")
 print("\n" + "=" * 80)
 print("Feature Importance Analysis - Random Forest")
 print("=" * 80)
@@ -121,6 +109,9 @@ with open(filepath, 'wb') as f:
     pickle.dump(best_rf, f)
 
 print(f"[OK] random_forest_tuned.pkl saved to {models_dir}/")
+
+pbar_pipeline.update(1)
+pbar_pipeline.close()
 
 # ============================================================================
 # FINAL RESULTS

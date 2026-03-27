@@ -143,8 +143,10 @@ MODELS = [
         "pkl":   "logistic_regression.pkl",
         "model": LogisticRegression(
             max_iter=1000,
+            C=10.0,
+            class_weight='balanced',
             random_state=42,
-            n_jobs=-1,
+            n_jobs=1,
         ),
         "X_tr": X_train_scaled,   # SCALED — required for gradient-based optimizer
         "X_te": X_test_scaled,
@@ -155,7 +157,7 @@ MODELS = [
         "name": "2_naive_bayes",
         "label": "2. Naive Bayes (Probabilistic Baseline)",
         "pkl":   "naive_bayes.pkl",
-        "model": GaussianNB(),
+        "model": GaussianNB(var_smoothing=1e-5),
         "X_tr": X_train_scaled,   # SCALED — Gaussian likelihood benefits from normalization
         "X_te": X_test_scaled,
         "gpu":  False,
@@ -166,11 +168,13 @@ MODELS = [
         "label": "3. Random Forest (Tree Ensemble)",
         "pkl":   "random_forest.pkl",
         "model": RandomForestClassifier(
-            n_estimators=100,
-            max_depth=20,
+            n_estimators=50,
+            max_depth=5,
+            min_samples_leaf=20,
+            max_features='sqrt',
             random_state=42,
-            n_jobs=-1,
-            class_weight='balanced_subsample',
+            n_jobs=1,
+            class_weight='balanced',
         ),
         "X_tr": X_train,   # RAW — trees are scale-invariant
         "X_te": X_test,
@@ -183,12 +187,16 @@ MODELS = [
         "pkl":   "xgboost.pkl",
         "model": xgb.XGBClassifier(
             n_estimators=100,
-            max_depth=7,
-            learning_rate=0.1,
-            subsample=0.8,
-            colsample_bytree=0.8,
+            max_depth=3,
+            learning_rate=0.01,
+            subsample=0.5,
+            colsample_bytree=0.5,
+            min_child_weight=10,
+            reg_lambda=10,
+            reg_alpha=1,
+            gamma=5,
             random_state=42,
-            n_jobs=-1,
+            n_jobs=1,
             eval_metric='mlogloss',
             tree_method='hist',   # histogram-based — works on both CPU & GPU
             device='cuda:0',      # NVIDIA GPU (auto-fallback to CPU if unavailable)
@@ -205,13 +213,15 @@ MODELS = [
         "model": lgb.LGBMClassifier(
             n_estimators=100,
             max_depth=7,
-            learning_rate=0.1,
+            learning_rate=0.05,
             subsample=0.8,
             colsample_bytree=0.8,
+            reg_lambda=10.0,
+            class_weight='balanced',
             random_state=42,
-            n_jobs=-1,
+            n_jobs=1,
             device_type='gpu',    # NVIDIA GPU via OpenCL (auto-fallback to CPU)
-            min_child_samples=5,
+            min_child_samples=100,
             verbose=-1,
         ),
         "X_tr": X_train,   # RAW — LightGBM histogram binning is scale-invariant

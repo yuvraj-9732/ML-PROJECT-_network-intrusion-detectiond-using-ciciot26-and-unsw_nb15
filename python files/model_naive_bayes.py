@@ -27,6 +27,7 @@ from data_setup import (
     evaluate_model, imbalance_ratio, X
 )
 from sklearn.naive_bayes import GaussianNB
+from tqdm import tqdm
 import pickle
 import os
 
@@ -53,23 +54,35 @@ Importance: Simple baseline shows impact of independence assumptions
 Weakness: Assumes features independent (they're not!)
 """)
 
-nb_model = GaussianNB()
+pipeline_stages = ["Setup", "Training & Evaluation", "Saving model"]
+pbar_pipeline = tqdm(pipeline_stages, desc="Naive Bayes Pipeline",
+                     bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]")
+
+# Stage 1: Setup
+pbar_pipeline.set_description("[1/3] Setup")
+nb_model = GaussianNB(var_smoothing=1e-5)
+pbar_pipeline.update(1)
+
+# Stage 2: Training & Evaluation
+pbar_pipeline.set_description("[2/3] Training & Evaluating")
 results_nb = evaluate_model(nb_model, X_train_scaled, X_test_scaled, y_train, y_test,
                             "2. Naive Bayes (Probabilistic Baseline)")
+pbar_pipeline.update(1)
 
-# ============================================================================
-# SAVE MODEL
-# ============================================================================
-print("\n" + "=" * 80)
-print("Saving Naive Bayes Model")
-print("=" * 80)
-
+# Stage 3: Save
+pbar_pipeline.set_description("[3/3] Saving model")
 models_dir = 'saved_models'
 os.makedirs(models_dir, exist_ok=True)
 
 filepath = os.path.join(models_dir, 'naive_bayes.pkl')
 with open(filepath, 'wb') as f:
     pickle.dump(results_nb['Model Object'], f)
+pbar_pipeline.update(1)
+pbar_pipeline.close()
+
+print("\n" + "=" * 80)
+print("Saving Naive Bayes Model")
+print("=" * 80)
 print(f"  [OK] naive_bayes.pkl saved to {models_dir}/")
 
 print("\n" + "=" * 80)

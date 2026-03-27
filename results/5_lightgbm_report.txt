@@ -8,10 +8,10 @@
   Train F1 (weighted)     : 0.385720
   Test  F1 (weighted)     : 0.386110
   Test  F1 (macro)        : 0.176302
-  CV    F1 (weighted, 3k) : 0.147225
+  CV    F1 (weighted, 3k) : 0.265893
   Overfitting Gap         : -0.000355
-  Training Time           : 26.713s
-  Inference Time          : 1.436s
+  Training Time           : 28.787s
+  Inference Time          : 1.455s
   Overfitting Verdict     : ✓ EXCELLENT generalization (gap < 2%)
 
 ── CONFUSION MATRIX ───────────────────────────────────────────────────────

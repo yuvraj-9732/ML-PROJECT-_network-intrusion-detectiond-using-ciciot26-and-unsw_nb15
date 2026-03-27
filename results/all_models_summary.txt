@@ -1,4 +1,4 @@
-  ==========================================================================================
+==========================================================================================
   ALL MODELS — COMPARISON SUMMARY
   Dataset: CICIoT2023 + UNSW-NB15 (merged_clean.parquet)
   Features: 35 predictors → label (36 attack classes, integer 0-35)
@@ -7,18 +7,49 @@
 
 Model                                                Test Acc  F1-Weighted     F1-Macro      CV-F1        Gap   Train(s)
 ------------------------------------------------------------------------------------------
-4. XGBoost (Gradient Boosting)                         0.9892       0.9886       0.7436        nan    +0.0044      34.3s
-3. Random Forest (Tree Ensemble)                       0.9885       0.9885       0.8093     0.9766    +0.0088      32.6s
-1. Logistic Regression (Linear Baseline)               0.8279       0.8070       0.5366     0.7599    +0.0001     415.1s
-2. Naive Bayes (Probabilistic Baseline)                0.7050       0.6504       0.4254     0.6938    -0.0003       0.5s
-5. LightGBM (Fast Gradient Boosting) [CPU fallbac      0.4121       0.3861       0.1763     0.1472    -0.0004      26.7s
+4. XGBoost (Gradient Boosting)                         0.9789       0.9765       0.6354     0.9316    +0.0005      22.3s
+3. Random Forest (Tree Ensemble)                       0.8431       0.8345       0.5344     0.8479    +0.0006      25.5s
+1. Logistic Regression (Linear Baseline)               0.8086       0.8026       0.5211     0.8066    -0.0005     568.3s
+2. Naive Bayes (Probabilistic Baseline)                0.7096       0.6579       0.4247     0.6519    -0.0003       0.5s
+5. LightGBM (Fast Gradient Boosting) [CPU fallbac      0.4121       0.3861       0.1763     0.2659    -0.0004      28.8s
 
 ==========================================================================================
 
   BEST MODEL : 4. XGBoost (Gradient Boosting)
-  Test Accuracy : 0.9892 (98.92%)
-  F1 Weighted   : 0.9886
-  F1 Macro      : 0.7436
-  Overfitting   : +0.004367
+  Test Accuracy : 0.9789 (97.89%)
+  F1 Weighted   : 0.9765
+  F1 Macro      : 0.6354
+  Overfitting   : +0.000483
 
+==========================================================================================
+
+==========================================================================================
+  ANALYSIS: OVERFITTING vs. UNDERFITTING
+==========================================================================================
+The objective was to tune models to an 85-92% accuracy range while minimizing False 
+Negatives. Looking at the "Gap" column (Train Accuracy - Test Accuracy), EVERY model has 
+an Overfitting Gap of less than 0.1% (< 0.001). This confirms that NONE of the models 
+are currently overfitting. In fact, due to our heavy constraints, most are UNDERFITTING:
+
+1. Logistic Regression (80.86%): Underfitting. Linear models inherently suffer from high 
+   bias when faced with complex, non-linear boundaries across 35 features and 36 classes.
+   Adding class_weight='balanced' strongly prioritized rare attack classes, costing 
+   overall accuracy and pulling it under 85%.
+
+2. Naive Bayes (70.96%): Underfitting. The model makes a strong assumption that all 
+   network features are independent. In reality, network traffic features are highly 
+   correlated, causing the probabilistic baseline to hit a hard mathematical ceiling.
+
+3. Random Forest (84.31%): Slight underfitting. We aggressively constrained the trees 
+   (max_depth=5, min_samples_leaf=20) to pull accuracy down from ~98.8%. It generalized
+   perfectly (gap +0.0006) but lacks the depth capacity to easily reach higher accuracy.
+
+4. XGBoost (97.89%): Strong fit. Even with max_depth=3 and high regularization (gamma=5), 
+   the sequential nature of boosting still captured complex patterns, keeping accuracy 
+   very high. It generalized almost perfectly.
+
+5. LightGBM (41.21%): Severe underfitting. The combination of min_child_samples=100 
+   and class_weight='balanced' on a dataset with a 5810x class imbalance ratio forced 
+   the leaf-wise growth to prematurely stop. It lacks the freedom to partition the 
+   majority classes effectively under these constraints.
 ==========================================================================================

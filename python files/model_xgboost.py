@@ -1,112 +1,122 @@
 """
 ═══════════════════════════════════════════════════════════════════════════════
-  MODEL 4: XGBOOST (Gradient Boosting) [BEST]
+  MODEL 4: XGBOOST (Regularized + Tuned + Early Stopping)
   Network Intrusion Detection System
 ═══════════════════════════════════════════════════════════════════════════════
-
-MATHEMATICAL FOUNDATION:
-─────────────────────────────────────────────────────────────────────────────
-Sequential Ensemble (learns to correct previous errors):
-  ŷ = Σ α_m * f_m(x) for m=1 to M trees
-  where α_m = learning_rate (step size), f_m = weak learner (tree) m
-
-Gradient Boosting (fit each tree to residual errors):
-  Residual = y_true - ŷ_previous
-  Tree m learns to predict residuals using negative gradients:
-  dL/dŷ = ŷ - y_true  [cross-entropy gradient]
-
-Loss Function (multi-class log-loss + regularization):
-  L_total = -Σ y_k*log(ŷ_k) + λ*||w||  [L2 regularization]
-  λ = 1.0 (penalizes large weights to prevent overfitting)
-
-Regularization Strategies:
-  - Shrinkage: α_m = 0.1 (small steps prevent oscillation)
-  - Max Depth: 7 (shallow trees, weak learners)
-  - Subsampling: 0.8 (randomness prevents overfitting)
-  - Feature Subsampling: 0.8 (use 80% of 35 features per tree)
-
-Theory: Sequential error correction via gradient descent in tree space
-─────────────────────────────────────────────────────────────────────────────
 """
 
 from data_setup import (
-    X_train, X_test,          # raw features — trees are scale-invariant
+    X_train, X_test,
     y_train, y_test,
     evaluate_model, imbalance_ratio, X
 )
+
 import xgboost as xgb
+from sklearn.model_selection import RandomizedSearchCV
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 import os
+import time
+from tqdm import tqdm
 
-# ============================================================================
-# MODEL 4: XGBOOST
-# ============================================================================
-print("\n" + "=" * 80)
-print("MODEL 4: XGBOOST (Gradient Boosting) [BEST]")
-print("=" * 80)
-print("""
-Mathematical Equation (Sequential Boosting):
-  ŷ = Σ α_m * f_m(x) for m=1 to 100 trees
-  
-Gradient-based Tree Learning:
-  Tree m learns to fit negative gradients:
-  dL/dŷ = ŷ - y_true
-  
-Loss Function with Regularization:
-  L_total = -Σ y_k*log(ŷ_k) + λ*||w||
-  λ = 1.0 (L2 regularization)
-  
-Regularization Strategy:
-  ✓ Shrinkage: learning_rate = 0.1 (small steps)
-  ✓ Max Depth: 7 (weak learners)
-  ✓ Subsampling: 0.8 (data randomness)
-  ✓ Colsample: 0.8 (feature randomness)
-  
-Why: 98.95% accuracy! Gradient descent corrects each tree's errors
-When: Best all-around for tabular data (networks, medical, finance)
-Importance: Sequential refinement beats single ensemble
-Mechanism: Each tree fixes what previous trees got wrong
-""")
+pipeline_stages = ["Setup & Best Parameters", "Final Training", "Evaluation & Save"]
+pbar_pipeline = tqdm(pipeline_stages, desc="XGBoost Pipeline",
+                     bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]")
 
-xgb_model = xgb.XGBClassifier(
-    n_estimators=300,
-    max_depth=None,
-    learning_rate=0.1,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    random_state=42,
+# ── Stage 1: Base Model Setup & Best Parameters ───────────────────────────────
+pbar_pipeline.set_description("[1/3] Setup & Best Parameters")
+
+print("\n[INFO] Using pre-tuned best hyperparameters...")
+best_params = {
+    'subsample': 0.5,
+    'reg_lambda': 10,
+    'reg_alpha': 1,
+    'n_estimators': 100,
+    'min_child_weight': 10,
+    'max_depth': 3,
+    'learning_rate': 0.01,
+    'gamma': 5,
+    'colsample_bytree': 0.5
+}
+
+best_xgb = xgb.XGBClassifier(
+    objective='multi:softprob',
     eval_metric='mlogloss',
-    tree_method='hist',            # histogram-based, works on CPU and GPU
-    device='cuda:0',               # Try GPU first, will auto-fallback to CPU if unavailable
+    tree_method='hist',
+    device='cuda:0',  # will fallback to CPU if GPU not available
+    random_state=42,
+    **best_params
 )
-# Tree models use RAW (unscaled) features — XGBoost uses histogram-based splits
-# which are inherently scale-invariant. Raw features preserve original units
-# so that feature importance scores map directly to network traffic semantics.
-results_xgb = evaluate_model(xgb_model, X_train, X_test, y_train, y_test,
-                             "4. XGBoost (Gradient Boosting)")
+
+pbar_pipeline.update(1)
+
+# ── Stage 2: Final Training (Early Stopping) ─────────────────────────────────
+pbar_pipeline.set_description("[2/3] Final Training (Early Stopping)")
+print("\n[INFO] Training with Early Stopping...")
+
+n_estimators = best_xgb.get_params().get('n_estimators', 200)
+pbar_trees = tqdm(total=n_estimators, desc="  XGBoost trees", unit="tree", leave=True,
+                  bar_format="  {l_bar}{bar}| {n_fmt}/{total_fmt} trees [{elapsed}<{remaining}]")
+
+class TqdmTreeCallback(xgb.callback.TrainingCallback):
+    def after_iteration(self, model, epoch, evals_log):
+        pbar_trees.update(1)
+        loss = list(list(evals_log.values())[0].values())[0][-1] if evals_log else None
+        if loss is not None:
+            pbar_trees.set_postfix(val_loss=f"{loss:.4f}")
+        return False
+
+best_xgb.set_params(
+    early_stopping_rounds=20,
+    callbacks=[TqdmTreeCallback()]
+)
+best_xgb.fit(
+    X_train, y_train,
+    eval_set=[(X_test, y_test)],
+    verbose=True
+)
+pbar_trees.close()
+pbar_pipeline.update(1)
+
+# ── Stage 3: Evaluation & Save ───────────────────────────────────────────────
+# Remove early_stopping_rounds & tqdm callback before evaluate_model —
+# evaluate_model calls fit() without an eval_set, which would crash early stopping.
+pbar_pipeline.set_description("[3/3] Evaluation & Save")
+best_xgb.set_params(early_stopping_rounds=None, callbacks=[])
+results_xgb = evaluate_model(
+    best_xgb,
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    "4. XGBoost (Tuned + Regularized)"
+)
 
 # ============================================================================
-# FEATURE IMPORTANCE (XGBoost)
+# FEATURE IMPORTANCE
 # ============================================================================
 print("\n" + "=" * 80)
 print("Feature Importance Analysis - XGBoost")
 print("=" * 80)
 
 feature_names = X.columns
-xgb_importance = results_xgb['Model Object'].feature_importances_
-xgb_importance_sorted = np.argsort(xgb_importance)[-15:]  # Top 15
+xgb_importance = best_xgb.feature_importances_
+xgb_importance_sorted = np.argsort(xgb_importance)[-15:]
 
 plt.figure(figsize=(10, 8))
-plt.barh(feature_names[xgb_importance_sorted], xgb_importance[xgb_importance_sorted], color='coral')
+plt.barh(feature_names[xgb_importance_sorted],
+         xgb_importance[xgb_importance_sorted])
 plt.xlabel('Importance', fontweight='bold')
 plt.title('XGBoost - Top 15 Features', fontweight='bold')
 plt.grid(axis='x', alpha=0.3)
 plt.tight_layout()
-plt.savefig('feature_importance_xgb.png', dpi=300, bbox_inches='tight')
+plt.savefig('feature_importance_xgb.png', dpi=300)
 plt.close()
-print("Visualization saved: feature_importance_xgb.png")
+
+print("[OK] Feature importance plot saved")
+pbar_pipeline.update(1)
+pbar_pipeline.close()
 
 # ============================================================================
 # SAVE MODEL
@@ -118,14 +128,20 @@ print("=" * 80)
 models_dir = 'saved_models'
 os.makedirs(models_dir, exist_ok=True)
 
-filepath = os.path.join(models_dir, 'xgboost.pkl')
-with open(filepath, 'wb') as f:
-    pickle.dump(results_xgb['Model Object'], f)
-print(f"  [OK] xgboost.pkl saved to {models_dir}/")
+filepath = os.path.join(models_dir, 'xgboost_tuned.pkl')
 
+with open(filepath, 'wb') as f:
+    pickle.dump(best_xgb, f)
+
+print(f"[OK] xgboost_tuned.pkl saved to {models_dir}/")
+
+# ============================================================================
+# FINAL RESULTS
+# ============================================================================
 print("\n" + "=" * 80)
 print("[OK] XGBOOST TRAINING COMPLETE")
 print("=" * 80)
+
 print(f"\n  Test Accuracy:      {results_xgb['Test Accuracy']:.4f}")
 print(f"  Test F1 (weighted): {results_xgb['Test F1 (weighted)']:.4f}")
 print(f"  Test F1 (macro):    {results_xgb['Test F1 (macro)']:.4f}")
